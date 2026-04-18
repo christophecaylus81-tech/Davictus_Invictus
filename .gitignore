@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+coverage/
+*.log
+.ssh/
+workspace/MEMORY.md
+workspace/reports/

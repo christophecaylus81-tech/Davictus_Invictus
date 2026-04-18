@@ -1,0 +1,52 @@
+{
+  "id": "fusion-google-calendar-today",
+  "name": "Fusion - Google Calendar - Agenda",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger-1",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        260,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "getAll",
+        "calendar": {
+          "mode": "id",
+          "value": "primary"
+        }
+      },
+      "id": "calendar-node-1",
+      "name": "Google Calendar - Agenda",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        560,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Google Calendar - Agenda",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "pinData": {},
+  "versionId": "a5c4c8bb-d55f-4531-b00c-0ad540fd1002"
+}

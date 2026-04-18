@@ -1,0 +1,32 @@
+{
+  // Recharge automatique des fichiers modifiés en dehors de l'éditeur
+  "files.autoSave": "off",
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/dist/**": true
+  },
+
+  // KANBAN.md s'ouvre en aperçu Markdown par défaut
+  "workbench.editorAssociations": {
+    "*.md": "vscode.markdown.preview.editor"
+  },
+
+  // Highlight des statuts dans KANBAN.md
+  "editor.tokenColorCustomizations": {
+    "textMateRules": [
+      {
+        "scope": "markup.bold",
+        "settings": { "foreground": "#C586C0" }
+      }
+    ]
+  },
+
+  // Terminal intégré pointe sur le workspace Fusion
+  "terminal.integrated.cwd": "${workspaceFolder}",
+
+  // Exclure les dossiers lourds de la recherche
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/dist": true
+  }
+}

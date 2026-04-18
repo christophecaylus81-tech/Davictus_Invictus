@@ -1,0 +1,31 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fusion
+      POSTGRES_PASSWORD: fusion
+      POSTGRES_DB: fusion
+    volumes:
+      - fusion-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fusion -d fusion"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  fusion:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:3001:3001"
+
+volumes:
+  fusion-postgres-data:

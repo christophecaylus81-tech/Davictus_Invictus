@@ -1,0 +1,59 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Fusion — Démarrer",
+      "type": "shell",
+      "command": "npm run dev",
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "fusion",
+        "clear": true
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": { "regexp": "^(.*)$", "file": 1, "line": 2, "message": 3 },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "tsx watch",
+          "endsPattern": "Fusion API démarrée"
+        }
+      },
+      "options": { "cwd": "${workspaceFolder}" }
+    },
+    {
+      "label": "Fusion — Docker PostgreSQL",
+      "type": "shell",
+      "command": "docker compose up -d",
+      "presentation": {
+        "reveal": "silent",
+        "panel": "dedicated",
+        "group": "fusion"
+      },
+      "options": { "cwd": "${workspaceFolder}" }
+    },
+    {
+      "label": "Fusion — Lancer tout",
+      "dependsOrder": "sequence",
+      "dependsOn": ["Fusion — Docker PostgreSQL", "Fusion — Démarrer"],
+      "group": { "kind": "build", "isDefault": false },
+      "presentation": { "reveal": "always", "panel": "dedicated", "group": "fusion" }
+    },
+    {
+      "label": "Fusion — Ouvrir KANBAN",
+      "type": "shell",
+      "command": "code workspace/KANBAN.md",
+      "presentation": { "reveal": "silent" },
+      "options": { "cwd": "${workspaceFolder}" }
+    },
+    {
+      "label": "Fusion — Nouvelle tâche",
+      "type": "shell",
+      "command": "code workspace/KANBAN.md",
+      "presentation": { "reveal": "always", "panel": "dedicated", "group": "fusion" },
+      "options": { "cwd": "${workspaceFolder}" }
+    }
+  ]
+}
