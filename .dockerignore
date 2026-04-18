@@ -8,3 +8,12 @@ Documentation
 Branding
 SCHEMAS FUSION.pptx
 ~$SCHEMAS FUSION.pptx
+frontend
+workspace
+n8n
+.codex-deploy
+*.pptx
+*.pdf
+*.mp4
+*.png
+*.jpg
