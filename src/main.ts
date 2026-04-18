@@ -57,7 +57,10 @@ async function bootstrap(): Promise<void> {
     },
     captureInboxItem,
     processInboxItem,
-    notifier
+    notifier,
+    aiRouter,
+    projectRepository,
+    taskRepository
   );
   await telegramBot.start();
 
