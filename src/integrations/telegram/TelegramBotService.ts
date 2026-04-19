@@ -1013,7 +1013,11 @@ export class TelegramBotService {
       /^(tu es l[aà] ?[\?!.]?|test|ping|allo|vous êtes là)\b/i,
       /^(peux[-\s]tu|pouvez[-\s]vous|est[-\s]ce que tu|est[-\s]ce que vous)\b/i,
       /^(activer|installer|configurer|vérifier)\b.*api\b/i,
-      /^davitus\b/i
+      /^davitus\b/i,
+      // Consultations de données — auraient dû être action "none"
+      /^(consulter|regarder|voir|afficher|montrer|lister|donner|montre|donne)\b/i,
+      /^marquer\b.*\b(comme lu|lu|lus)\b/i,
+      /^(donnes?[-\s]moi|montre[-\s]moi)\b/i,
     ];
     return junkPatterns.some((re) => re.test(t));
   }
