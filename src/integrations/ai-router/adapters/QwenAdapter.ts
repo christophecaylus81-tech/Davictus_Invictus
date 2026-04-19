@@ -11,14 +11,17 @@ export class QwenAdapter implements LlmAdapter {
 
   private readonly baseUrl: string;
   private readonly model: string;
+  private readonly visionModel: string;
 
   constructor(
     private readonly apiKey: string,
     baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    model = "qwen-plus"
+    model = "qwen-plus",
+    visionModel = "qwen-vl-plus"
   ) {
     this.baseUrl = baseUrl;
     this.model = model;
+    this.visionModel = visionModel;
   }
 
   async isAvailable(): Promise<boolean> {
@@ -52,5 +55,36 @@ export class QwenAdapter implements LlmAdapter {
       model: this.name,
       tokensUsed: data.usage?.total_tokens
     };
+  }
+
+  // Vision : image en base64 + prompt texte → Qwen-VL
+  async analyzeImage(imageBase64: string, mimeType: string, prompt: string): Promise<string> {
+    const res = await fetch(`${this.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.apiKey}`
+      },
+      body: JSON.stringify({
+        model: this.visionModel,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
+              { type: "text", text: prompt || "Analyse cette image et décris ce que tu vois." }
+            ]
+          }
+        ],
+        max_tokens: 1024,
+      })
+    });
+
+    if (!res.ok) {
+      throw new Error(`Qwen vision error ${res.status}: ${await res.text()}`);
+    }
+
+    const data = (await res.json()) as OpenAiChatResponse;
+    return (data.choices[0]?.message.content ?? "").trim();
   }
 }

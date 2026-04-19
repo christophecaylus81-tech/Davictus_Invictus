@@ -88,18 +88,15 @@ async function bootstrap(): Promise<void> {
 
   // ── Manager (au moins GPT ou DeepSeek requis, reste optionnel) ──────────────
   const managerGpt = gptAdapter ?? deepseekAdapter;
-  const managerService = managerGpt
-    ? new ManagerService(
-        {
-          gpt: managerGpt,
-          ...(qwenCoderAdapter   ? { qwenCoder:    qwenCoderAdapter   } : {}),
-          ...(geminiFlashAdapter ? { geminiFlash:  geminiFlashAdapter } : {}),
-          ...(geminiProAdapter   ? { geminiPro:    geminiProAdapter   } : {}),
-          ...(claudeAdapter      ? { claude:       claudeAdapter      } : {}),
-        },
-        developerControl
-      )
-    : undefined;
+  let managerService: ManagerService | undefined;
+  if (managerGpt) {
+    const adapters: import("./integrations/manager/ManagerService").ManagerAdapters = { gpt: managerGpt };
+    if (qwenCoderAdapter)   adapters.qwenCoder   = qwenCoderAdapter;
+    if (geminiFlashAdapter) adapters.geminiFlash = geminiFlashAdapter;
+    if (geminiProAdapter)   adapters.geminiPro   = geminiProAdapter;
+    if (claudeAdapter)      adapters.claude      = claudeAdapter;
+    managerService = new ManagerService(adapters, developerControl);
+  }
 
   if (managerService) {
     const active = [

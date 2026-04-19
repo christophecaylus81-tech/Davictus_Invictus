@@ -21,11 +21,11 @@ export interface InboxProcessingResult {
 }
 
 export interface ManagerAdapters {
-  gpt: LlmAdapter          // Manager lui-même (GPT-4.1-mini)
-  qwenCoder: LlmAdapter    // Code (Qwen-Coder)
-  geminiFlash: LlmAdapter  // Veille & synthèse rapide
-  geminiPro: LlmAdapter    // Rapports longs & recherche
-  claude?: LlmAdapter      // Cas critiques uniquement
+  gpt: LlmAdapter           // Manager lui-même — obligatoire (GPT ou DeepSeek)
+  qwenCoder?: LlmAdapter    // Code sans exécution — optionnel
+  geminiFlash?: LlmAdapter  // Veille & synthèse — optionnel
+  geminiPro?: LlmAdapter    // Rapports longs — optionnel
+  claude?: LlmAdapter       // Cas critiques — optionnel
 }
 
 export interface ManagerInput {
@@ -123,7 +123,8 @@ export class ManagerService {
 
     // Génération de code sans exécution
     if (decision.executor === 'qwen-coder') {
-      const response = await this.adapters.qwenCoder.complete({
+      const adapter = this.adapters.qwenCoder ?? this.adapters.gpt
+      const response = await adapter.complete({
         messages: [
           { role: 'system', content: 'Tu es un expert en développement logiciel. Génère du code propre, documenté et testé.' },
           { role: 'user', content: decision.task }
@@ -136,7 +137,8 @@ export class ManagerService {
 
     // Veille & synthèse rapide
     if (decision.executor === 'gemini-flash') {
-      const response = await this.adapters.geminiFlash.complete({
+      const adapter = this.adapters.geminiFlash ?? this.adapters.gpt
+      const response = await adapter.complete({
         messages: [
           { role: 'system', content: 'Tu es un expert en veille et synthèse d\'information. Sois concis et structuré.' },
           { role: 'user', content: decision.task }
@@ -149,7 +151,8 @@ export class ManagerService {
 
     // Recherche approfondie & rapports longs
     if (decision.executor === 'gemini-pro') {
-      const response = await this.adapters.geminiPro.complete({
+      const adapter = this.adapters.geminiPro ?? this.adapters.geminiFlash ?? this.adapters.gpt
+      const response = await adapter.complete({
         messages: [
           { role: 'system', content: 'Tu es un expert en recherche et analyse. Produis une réponse complète, sourcée et structurée.' },
           { role: 'user', content: decision.task }
