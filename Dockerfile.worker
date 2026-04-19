@@ -1,0 +1,31 @@
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY tsconfig.json ./
+COPY src ./src
+RUN npm run build
+
+# ── Runtime worker ────────────────────────────────────────────────────────────
+FROM node:20-alpine AS runner
+WORKDIR /app
+
+# Git + outils nécessaires au worker
+RUN apk add --no-cache git openssh-client
+
+# Codex CLI (OpenAI)
+RUN npm install -g @openai/codex
+
+ENV NODE_ENV=production
+
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+COPY --from=builder /app/dist ./dist
+
+# Le repo cible est monté via volume dans docker-compose
+# Le worker pointe dessus via DEV_AGENT_REPO_PATH
+
+CMD ["node", "dist/dev-agent/worker.js"]

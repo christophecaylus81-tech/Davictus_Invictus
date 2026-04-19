@@ -52,6 +52,11 @@ const rawEnvSchema = z.object({
     z.string().url().default("https://dashscope.aliyuncs.com/compatible-mode/v1")
   ),
   QWEN_MODEL: withEmptyStringFallback(z.string().default("qwen-plus")),
+  GEMINI_API_KEY: withEmptyStringFallback(z.string().optional()),
+  GEMINI_FLASH_MODEL: withEmptyStringFallback(z.string().default("gemini-2.0-flash")),
+  GEMINI_PRO_MODEL: withEmptyStringFallback(z.string().default("gemini-2.5-pro")),
+  QWEN_CODER_MODEL: withEmptyStringFallback(z.string().default("qwen-coder-plus")),
+  OPENAI_MANAGER_MODEL: withEmptyStringFallback(z.string().default("gpt-4o-mini")),
   DEV_AGENT_WORKER_TOKEN: withEmptyStringFallback(z.string().optional()),
   DEV_AGENT_SERVER_URL: withEmptyStringFallback(
     z.string().url().default("http://localhost:3001")
@@ -62,6 +67,7 @@ const rawEnvSchema = z.object({
   DEV_AGENT_WORKER_ID: withEmptyStringFallback(
     z.string().default("davitus-local-worker")
   ),
+  GOOGLE_REDIRECT_URI: withEmptyStringFallback(z.string().optional()),
   DEV_AGENT_REPO_PATH: withEmptyStringFallback(z.string().optional()),
   DEV_AGENT_POLL_INTERVAL_MS: withEmptyStringFallback(
     z.coerce.number().int().min(1000).max(60000).default(5000)
@@ -109,7 +115,15 @@ export const env = {
     anthropicApiKey: normalizeOptional(parsed.ANTHROPIC_API_KEY),
     qwenApiKey: normalizeOptional(parsed.QWEN_API_KEY),
     qwenBaseUrl: parsed.QWEN_BASE_URL,
-    qwenModel: parsed.QWEN_MODEL
+    qwenModel: parsed.QWEN_MODEL,
+    geminiApiKey: normalizeOptional(parsed.GEMINI_API_KEY),
+    geminiFlashModel: parsed.GEMINI_FLASH_MODEL,
+    geminiProModel: parsed.GEMINI_PRO_MODEL,
+    qwenCoderModel: parsed.QWEN_CODER_MODEL,
+    openaiManagerModel: parsed.OPENAI_MANAGER_MODEL
+  },
+  google: {
+    redirectUri: normalizeOptional(parsed.GOOGLE_REDIRECT_URI)
   },
   devAgent: {
     workerToken: normalizeOptional(parsed.DEV_AGENT_WORKER_TOKEN),

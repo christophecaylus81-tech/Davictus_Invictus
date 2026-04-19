@@ -4,16 +4,31 @@ import { env } from "./config/env";
 import { CaptureInboxItemUseCase } from "./domain/inbox/usecases/CaptureInboxItemUseCase";
 import { ProcessInboxItemUseCase } from "./domain/inbox/usecases/ProcessInboxItemUseCase";
 import { closePool, pool } from "./infra/db/pool";
+import { PgDevAgentJobRepository } from "./infra/repositories/PgDevAgentJobRepository";
 import { PgInboxProcessingGateway } from "./infra/repositories/PgInboxProcessingGateway";
 import { PgInboxRepository } from "./infra/repositories/PgInboxRepository";
 import { PgProcessingLogRepository } from "./infra/repositories/PgProcessingLogRepository";
 import { PgProjectRepository } from "./infra/repositories/PgProjectRepository";
 import { PgTaskRepository } from "./infra/repositories/PgTaskRepository";
+import { PgTelegramUserRepository } from "./infra/repositories/PgTelegramUserRepository";
+import { PgCredentialRepository } from "./infra/repositories/PgCredentialRepository";
 import { createAiRouter } from "./integrations/ai-router";
+import { DeepSeekAdapter } from "./integrations/ai-router/adapters/DeepSeekAdapter";
+import { ClaudeAdapter } from "./integrations/ai-router/adapters/ClaudeAdapter";
+import { OpenAiAdapter } from "./integrations/ai-router/adapters/OpenAiAdapter";
+import { GeminiAdapter } from "./integrations/ai-router/adapters/GeminiAdapter";
+import { QwenAdapter } from "./integrations/ai-router/adapters/QwenAdapter";
+import { DeveloperControlService } from "./integrations/dev-agent/DeveloperControlService";
+import { GoogleAuthService } from "./integrations/google/GoogleAuthService";
+import { GmailService } from "./integrations/google/GmailService";
+import { GoogleCalendarService } from "./integrations/google/GoogleCalendarService";
+import { GoogleTasksService } from "./integrations/google/GoogleTasksService";
+import { ManagerService } from "./integrations/manager/ManagerService";
 import { N8nWebhookNotifier } from "./integrations/n8n/N8nAdapter";
 import { HttpOllamaClient } from "./integrations/ollama/OllamaAdapter";
 import { ManagerLoop } from "./integrations/orchestrator/ManagerLoop";
 import { TelegramBotService } from "./integrations/telegram/TelegramBotService";
+import { OpenAiSpeechToTextService } from "./integrations/voice/OpenAiSpeechToTextService";
 
 async function bootstrap(): Promise<void> {
   await pool.query("SELECT 1");
@@ -21,7 +36,10 @@ async function bootstrap(): Promise<void> {
   const inboxRepository = new PgInboxRepository(pool);
   const projectRepository = new PgProjectRepository(pool);
   const taskRepository = new PgTaskRepository(pool);
+  const userRepository = new PgTelegramUserRepository(pool);
+  const credentialRepository = new PgCredentialRepository(pool);
   const processingLogRepository = new PgProcessingLogRepository(pool);
+  const devAgentJobRepository = new PgDevAgentJobRepository(pool);
   const processingGateway = new PgInboxProcessingGateway();
   const aiRouter = createAiRouter();
 
@@ -34,6 +52,60 @@ async function bootstrap(): Promise<void> {
   });
 
   const notifier = new N8nWebhookNotifier(env.integrations.n8nWebhookUrl);
+  const speechToText = env.integrations.openaiApiKey
+    ? new OpenAiSpeechToTextService(
+        env.integrations.openaiApiKey,
+        env.integrations.openaiBaseUrl,
+        env.integrations.openaiTranscribeModel
+      )
+    : undefined;
+  const WORK_DIR = join(process.cwd(), "workspace");
+  const KANBAN_PATH = join(WORK_DIR, "KANBAN.md");
+  const developerControl = new DeveloperControlService(devAgentJobRepository, KANBAN_PATH);
+
+  const googleAuth = new GoogleAuthService(credentialRepository);
+  const gmailService = new GmailService(googleAuth);
+  const calendarService = new GoogleCalendarService(googleAuth);
+  const googleTasksService = new GoogleTasksService(googleAuth);
+
+  // ── Adapters IA ──────────────────────────────────────────────────────────────
+  const gptAdapter = env.integrations.openaiApiKey
+    ? new OpenAiAdapter(env.integrations.openaiApiKey, env.integrations.openaiManagerModel, env.integrations.openaiBaseUrl)
+    : undefined;
+  const deepseekAdapter = env.integrations.deepseekApiKey
+    ? new DeepSeekAdapter(env.integrations.deepseekApiKey, env.integrations.deepseekBaseUrl)
+    : undefined;
+  const claudeAdapter = env.integrations.anthropicApiKey
+    ? new ClaudeAdapter(env.integrations.anthropicApiKey)
+    : undefined;
+  const qwenCoderAdapter = env.integrations.qwenApiKey
+    ? new QwenAdapter(env.integrations.qwenApiKey, env.integrations.qwenBaseUrl, env.integrations.qwenCoderModel)
+    : undefined;
+  const geminiFlashAdapter = env.integrations.geminiApiKey
+    ? new GeminiAdapter(env.integrations.geminiApiKey, env.integrations.geminiFlashModel)
+    : undefined;
+  const geminiProAdapter = env.integrations.geminiApiKey
+    ? new GeminiAdapter(env.integrations.geminiApiKey, env.integrations.geminiProModel)
+    : undefined;
+
+  // ── Manager (GPT orchestrateur, équipe spécialisée) ──────────────────────────
+  const managerGpt = gptAdapter ?? deepseekAdapter;
+  const managerService = managerGpt && qwenCoderAdapter && geminiFlashAdapter && geminiProAdapter
+    ? new ManagerService(
+        {
+          gpt: managerGpt,
+          qwenCoder: qwenCoderAdapter,
+          geminiFlash: geminiFlashAdapter,
+          geminiPro: geminiProAdapter,
+          ...(claudeAdapter ? { claude: claudeAdapter } : {})
+        },
+        developerControl
+      )
+    : undefined;
+
+  if (!managerService) {
+    console.warn('[Manager] Service inactif — requis : (OPENAI_API_KEY ou DEEPSEEK_API_KEY) + QWEN_API_KEY + GEMINI_API_KEY')
+  }
 
   const app = createServer({
     captureInboxItem,
@@ -42,17 +114,19 @@ async function bootstrap(): Promise<void> {
     projectRepository,
     taskRepository,
     processingLogRepository,
+    devAgentJobRepository,
+    credentialRepository,
     notifier
   });
 
-  const server = app.listen(env.port, () => {
-    console.log(`Fusion API démarrée sur http://localhost:${env.port}`);
+  const server = app.listen(env.port, env.host, () => {
+    console.log(`Fusion API démarrée sur http://${env.host}:${env.port}`);
   });
 
   const telegramBot = new TelegramBotService(
     {
       token: env.telegram.token,
-      allowedChatIds: env.telegram.allowedChatIds,
+      adminChatIds: env.telegram.allowedChatIds,
       autoProcess: env.telegram.autoProcess
     },
     captureInboxItem,
@@ -60,19 +134,28 @@ async function bootstrap(): Promise<void> {
     notifier,
     aiRouter,
     projectRepository,
-    taskRepository
+    taskRepository,
+    speechToText,
+    userRepository,
+    developerControl,
+    gmailService,
+    calendarService,
+    googleTasksService,
+    managerService
   );
-  await telegramBot.start();
+  try {
+    await telegramBot.start();
+  } catch (error) {
+    console.error("Telegram indisponible au démarrage :", error);
+  }
 
   // ── Ollama health check ──────────────────────────────────────────────────────
   const ollamaClient = new HttpOllamaClient(env.integrations.ollamaBaseUrl);
   const ollamaReady = await ollamaClient.isAvailable();
   console.log(`Ollama disponible: ${ollamaReady ? "oui" : "non"}`);
+  console.log(`Transcription vocale: ${speechToText ? "configurée" : "non configurée"}`);
 
   // ── Orchestrateur ────────────────────────────────────────────────────────────
-  const WORK_DIR = join(process.cwd(), "workspace");
-  const KANBAN_PATH = join(WORK_DIR, "KANBAN.md");
-
   const managerLoop = new ManagerLoop({
     kanbanPath: KANBAN_PATH,
     workDir: WORK_DIR,

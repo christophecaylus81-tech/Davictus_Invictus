@@ -11,6 +11,7 @@ export interface AiRouterConfig {
   // Cloud adapters (optional — degrade gracefully if not configured)
   deepseek?: LlmAdapter | undefined;
   claude?: LlmAdapter | undefined;
+  qwen?: LlmAdapter | undefined;
 }
 
 export class AiRouter {
@@ -34,19 +35,24 @@ export class AiRouter {
 
     switch (complexity.level) {
       case "trivial":
+      case "simple": {
+        // Ollama préféré si dispo, sinon DeepSeek cloud
+        const ds = this.config.deepseek;
+        if (ds && (await ds.isAvailable())) {
+          return {
+            target: "deepseek:deepseek-chat",
+            adapter: ds,
+            complexity,
+            fallback: "ollama:deepseek-r1:7b"
+          };
+        }
         return {
           target: "ollama:llama3.2:latest",
           adapter: this.config.ollamaLight,
           complexity,
           fallback: "ollama:deepseek-r1:7b"
         };
-
-      case "simple":
-        return {
-          target: "ollama:deepseek-r1:7b",
-          adapter: this.config.ollamaReason,
-          complexity
-        };
+      }
 
       case "moderate": {
         const ds = this.config.deepseek;
@@ -119,6 +125,7 @@ export class AiRouter {
     if (target === "ollama:deepseek-coder:6.7b") return this.config.ollamaCoder;
     if (target === "deepseek:deepseek-chat") return this.config.deepseek;
     if (target === "claude:claude-sonnet-4-6") return this.config.claude;
+    if (target === "qwen:qwen-plus") return this.config.qwen;
     return undefined;
   }
 }

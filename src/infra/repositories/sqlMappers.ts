@@ -1,3 +1,4 @@
+import type { DevAgentEventKind, DevAgentJob, DevAgentJobEvent, DevAgentJobStatus, DevAgentJobType, DevAgentProvider } from "../../domain/dev-agent/types";
 import type { ProcessingLogRecord } from "../../domain/logs/repositories";
 import type { InboxItem, InboxSource, InboxStatus } from "../../domain/inbox/types";
 import type { Project, ProjectStatus } from "../../domain/projects/types";
@@ -45,6 +46,36 @@ interface ProcessingLogRow {
   id: number;
   inbox_item_id: string;
   stage: string;
+  message: string;
+  created_at: Date | string;
+}
+
+interface DevAgentJobRow {
+  id: string;
+  source_chat_id: string;
+  request_text: string;
+  normalized_command: string;
+  job_type: string;
+  provider: string;
+  status: string;
+  repo_path: string | null;
+  branch_name: string | null;
+  worktree_path: string | null;
+  summary: string | null;
+  error_message: string | null;
+  claimed_by: string | null;
+  claimed_at: Date | string | null;
+  started_at: Date | string | null;
+  completed_at: Date | string | null;
+  created_at: Date | string;
+  updated_at: Date | string;
+}
+
+interface DevAgentJobEventRow {
+  id: number;
+  job_id: string;
+  sequence: number;
+  kind: string;
   message: string;
   created_at: Date | string;
 }
@@ -101,6 +132,40 @@ export function mapProcessingLogRow(row: ProcessingLogRow): ProcessingLogRecord 
     id: row.id,
     inboxItemId: row.inbox_item_id,
     stage: row.stage,
+    message: row.message,
+    createdAt: toDate(row.created_at)
+  };
+}
+
+export function mapDevAgentJobRow(row: DevAgentJobRow): DevAgentJob {
+  return {
+    id: row.id,
+    sourceChatId: row.source_chat_id,
+    requestText: row.request_text,
+    normalizedCommand: row.normalized_command,
+    jobType: row.job_type as DevAgentJobType,
+    provider: row.provider as DevAgentProvider,
+    status: row.status as DevAgentJobStatus,
+    repoPath: row.repo_path,
+    branchName: row.branch_name,
+    worktreePath: row.worktree_path,
+    summary: row.summary,
+    errorMessage: row.error_message,
+    claimedBy: row.claimed_by,
+    claimedAt: row.claimed_at ? toDate(row.claimed_at) : null,
+    startedAt: row.started_at ? toDate(row.started_at) : null,
+    completedAt: row.completed_at ? toDate(row.completed_at) : null,
+    createdAt: toDate(row.created_at),
+    updatedAt: toDate(row.updated_at)
+  };
+}
+
+export function mapDevAgentJobEventRow(row: DevAgentJobEventRow): DevAgentJobEvent {
+  return {
+    id: row.id,
+    jobId: row.job_id,
+    sequence: Number(row.sequence),
+    kind: row.kind as DevAgentEventKind,
     message: row.message,
     createdAt: toDate(row.created_at)
   };

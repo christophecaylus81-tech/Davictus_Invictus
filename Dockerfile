@@ -19,6 +19,7 @@ RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/src/infra/db/schema.sql ./src/infra/db/schema.sql
+COPY workspace/KANBAN.md ./workspace/KANBAN.md
 
 EXPOSE 3001
 

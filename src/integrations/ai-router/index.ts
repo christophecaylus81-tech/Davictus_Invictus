@@ -3,6 +3,7 @@ import { AiRouter } from "./AiRouter";
 import { ClaudeAdapter } from "./adapters/ClaudeAdapter";
 import { DeepSeekAdapter } from "./adapters/DeepSeekAdapter";
 import { OllamaLlmAdapter } from "./adapters/OllamaLlmAdapter";
+import { QwenAdapter } from "./adapters/QwenAdapter";
 
 export { AiRouter } from "./AiRouter";
 export { ComplexityEvaluator } from "./ComplexityEvaluator";
@@ -38,6 +39,15 @@ export function createAiRouter(): AiRouter {
       : {}),
     ...(env.integrations.anthropicApiKey
       ? { claude: new ClaudeAdapter(env.integrations.anthropicApiKey) }
+      : {}),
+    ...(env.integrations.qwenApiKey
+      ? {
+          qwen: new QwenAdapter(
+            env.integrations.qwenApiKey,
+            env.integrations.qwenBaseUrl,
+            env.integrations.qwenModel
+          )
+        }
       : {})
   };
 

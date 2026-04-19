@@ -24,8 +24,35 @@ services:
         condition: service_healthy
     env_file:
       - .env
+    networks:
+      - default
+      - n8n_default
     ports:
       - "127.0.0.1:3001:3001"
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    restart: unless-stopped
+    depends_on:
+      fusion:
+        condition: service_started
+    env_file:
+      - .env
+    environment:
+      DEV_AGENT_SERVER_URL: http://fusion:3001
+      DEV_AGENT_REPO_PATH: /workspace
+      DEV_AGENT_WORKER_ID: davitus-codex-vps
+    volumes:
+      # Le repo Fusion (source) monté pour que Codex code dedans
+      - /opt/fusion/repo:/workspace
+    networks:
+      - default
+
+networks:
+  n8n_default:
+    external: true
 
 volumes:
   fusion-postgres-data:

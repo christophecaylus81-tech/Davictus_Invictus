@@ -9,7 +9,8 @@ Branding
 SCHEMAS FUSION.pptx
 ~$SCHEMAS FUSION.pptx
 frontend
-workspace
+workspace/*
+!workspace/KANBAN.md
 n8n
 .codex-deploy
 *.pptx
