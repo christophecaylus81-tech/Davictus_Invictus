@@ -3,8 +3,16 @@ import { env } from "../../config/env";
 
 export type Queryable = Pick<Pool | PoolClient, "query">;
 
+const sslMode = process.env.PGSSLMODE?.toLowerCase();
+const useSsl =
+  sslMode === "require" ||
+  process.env.PGSSL === "true" ||
+  process.env.PGSSL === "1" ||
+  env.databaseUrl.includes("sslmode=require");
+
 export const pool = new Pool({
-  connectionString: env.databaseUrl
+  connectionString: env.databaseUrl,
+  ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {})
 });
 
 export async function withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
