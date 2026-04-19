@@ -8,6 +8,14 @@ interface Credential {
   updatedAt: string
 }
 
+interface CredentialForm {
+  key: string
+  label: string
+  category: Credential['category']
+  description: string
+  value: string
+}
+
 const CATEGORY_LABELS: Record<string, string> = {
   api:     'Clé API',
   oauth:   'OAuth',
@@ -21,6 +29,12 @@ const CATEGORY_COLORS: Record<string, string> = {
   webhook: '#10b981',
   other:   '#f59e0b',
 }
+
+const VPS_PRESETS = [
+  { key: 'VPS_HOST', label: 'VPS Host / IP',   category: 'other' as const, description: 'ex: 51.254.200.78 ou monserveur.com' },
+  { key: 'VPS_USER', label: 'VPS Utilisateur', category: 'other' as const, description: 'ex: ubuntu, root' },
+  { key: 'VPS_SSH_KEY', label: 'Clé SSH privée (PEM)', category: 'other' as const, description: 'Contenu de ~/.ssh/id_ed25519 ou id_rsa — utilisé pour le déploiement automatique' },
+]
 
 const PRESETS = [
   { key: 'GOOGLE_CLIENT_ID',     label: 'Google Client ID',     category: 'oauth' as const, description: 'OAuth2 Google Cloud Console' },
@@ -42,7 +56,7 @@ const PRESETS = [
 export default function Admin() {
   const [credentials, setCredentials] = useState<Credential[]>([])
   const [editKey, setEditKey] = useState<string | null>(null)
-  const [form, setForm] = useState({ key: '', label: '', category: 'api' as const, description: '', value: '' })
+  const [form, setForm] = useState<CredentialForm>({ key: '', label: '', category: 'api', description: '', value: '' })
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
   const [googleConnected, setGoogleConnected] = useState<boolean | null>(null)
@@ -166,6 +180,62 @@ export default function Admin() {
         </div>
       </div>
 
+      {/* VPS / Infrastructure */}
+      <h2 style={{ fontSize: 14, fontWeight: 600, color: '#f59e0b', marginBottom: 8, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+        Infrastructure VPS
+      </h2>
+      <div style={{ marginBottom: 12, padding: '10px 14px', background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)', borderRadius: 8 }}>
+        <p style={{ fontSize: 12, color: '#92400e', marginBottom: 6 }}>
+          Pour activer le déploiement en 1 clic depuis l'UI, configure l'hôte et la clé SSH.
+        </p>
+        <p style={{ fontSize: 11, color: '#4a5570' }}>
+          La clé privée est chiffrée AES-256 avant stockage. Commande pour générer une clé : <code style={{ background: 'rgba(255,255,255,0.05)', padding: '1px 6px', borderRadius: 4 }}>ssh-keygen -t ed25519 -f ~/.ssh/davitus</code>
+        </p>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 32 }}>
+        {VPS_PRESETS.map(preset => {
+          const configured = configuredKeys.has(preset.key)
+          return (
+            <div key={preset.key} style={{
+              background: 'rgba(255,255,255,0.03)',
+              border: `1px solid ${configured ? 'rgba(245,158,11,0.4)' : 'rgba(255,255,255,0.06)'}`,
+              borderRadius: 10, padding: '14px 16px',
+              display: 'flex', flexDirection: 'column', gap: 8,
+            }}>
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 600, color: configured ? '#f59e0b' : '#c8d0e8' }}>{preset.label}</p>
+                <p style={{ fontSize: 11, color: '#4a5570', marginTop: 2 }}>{preset.description}</p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {configured && (
+                  <span style={{ fontSize: 10, color: '#10b981', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 20, padding: '2px 8px' }}>
+                    ✓ Configuré
+                  </span>
+                )}
+                <button
+                  onClick={() => startEdit(preset)}
+                  style={{
+                    background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)',
+                    borderRadius: 6, color: '#f59e0b', fontSize: 11, fontWeight: 600,
+                    padding: '4px 10px', cursor: 'pointer',
+                  }}
+                >
+                  {configured ? 'Modifier' : 'Configurer'}
+                </button>
+                {configured && (
+                  <button
+                    onClick={() => remove(preset.key)}
+                    style={{ background: 'none', border: 'none', color: '#4a5570', cursor: 'pointer', fontSize: 14, padding: '2px 4px' }}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
       {/* Presets */}
       <h2 style={{ fontSize: 14, fontWeight: 600, color: '#7c6fff', marginBottom: 12, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
         Intégrations
@@ -284,14 +354,25 @@ export default function Admin() {
             <label style={{ fontSize: 12, color: '#4a5570', display: 'block', marginBottom: 4, marginTop: editKey === '__new__' ? 12 : 0 }}>
               Valeur (sera chiffrée)
             </label>
-            <input
-              type="password"
-              value={form.value}
-              onChange={e => setForm(f => ({ ...f, value: e.target.value }))}
-              placeholder="••••••••••••••••"
-              style={inputStyle}
-              autoComplete="off"
-            />
+            {form.key === 'VPS_SSH_KEY' ? (
+              <textarea
+                value={form.value}
+                onChange={e => setForm(f => ({ ...f, value: e.target.value }))}
+                placeholder={'-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----'}
+                rows={8}
+                style={{ ...inputStyle, fontFamily: 'monospace', fontSize: 11, resize: 'vertical' }}
+                autoComplete="off"
+              />
+            ) : (
+              <input
+                type="password"
+                value={form.value}
+                onChange={e => setForm(f => ({ ...f, value: e.target.value }))}
+                placeholder="••••••••••••••••"
+                style={inputStyle}
+                autoComplete="off"
+              />
+            )}
 
             {msg && (
               <p style={{ fontSize: 12, color: msg.ok ? '#10b981' : '#ef4444', marginTop: 10 }}>{msg.text}</p>
