@@ -139,7 +139,16 @@ export class DeveloperControlService {
       return { kind: "code_task", provider: "codex", request: rest };
     }
 
-    if (normalized.includes("kanban") && (normalized.includes("etat") || normalized.includes("status") || normalized.includes("ou en est"))) {
+    const kanbanTriggers = [
+      normalized.includes("kanban"),
+      normalized.includes("en production"),
+      normalized.includes("taches en cours"),
+      normalized.includes("tâches en cours"),
+      normalized.includes("worker") && normalized.includes("tache"),
+      normalized.includes("ou en sont") || normalized.includes("ou en est"),
+      normalized.includes("etat des taches") || normalized.includes("état des tâches"),
+    ];
+    if (kanbanTriggers.some(Boolean)) {
       return { kind: "kanban_status" };
     }
 
