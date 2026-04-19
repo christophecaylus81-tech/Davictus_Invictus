@@ -11,7 +11,9 @@ import type { GmailService } from "../google/GmailService";
 import type { GoogleCalendarService } from "../google/GoogleCalendarService";
 import type { GoogleTasksService } from "../google/GoogleTasksService";
 import type { ManagerService } from "../manager/ManagerService";
+import type { QwenAdapter } from "../ai-router/adapters/QwenAdapter";
 import type { ProcessingEventNotifier } from "../n8n/N8nAdapter";
+import { InterIABus } from "../orchestrator/InterIABus";
 import { ConversationManager } from "./ConversationManager";
 import { buildSystemPrompt, parseDavitusResponse } from "./DavitusPrompt";
 import type { SpeechToTextService } from "../voice/OpenAiSpeechToTextService";
@@ -30,6 +32,7 @@ export class TelegramBotService {
   private bot: Telegraf | null = null;
   private readonly conversations = new ConversationManager();
   private readonly jobWatchers = new Map<string, NodeJS.Timeout>();
+  private readonly interIABus?: InterIABus;
 
   constructor(
     private readonly options: TelegramBotOptions,
@@ -45,8 +48,27 @@ export class TelegramBotService {
     private readonly gmailService?: GmailService,
     private readonly calendarService?: GoogleCalendarService,
     private readonly googleTasksService?: GoogleTasksService,
-    private readonly managerService?: ManagerService
-  ) {}
+    private readonly managerService?: ManagerService,
+    private readonly qwenVision?: QwenAdapter,
+    private readonly workDir?: string
+  ) {
+    if (workDir) {
+      this.interIABus = new InterIABus(workDir);
+    }
+  }
+
+  /**
+   * Envoie un message à tous les admins — utilisé par ManagerLoop pour les
+   * notifications automatiques (tâche validée, rejetée, job terminé…)
+   */
+  async broadcastToAdmins(message: string): Promise<void> {
+    if (!this.bot) return;
+    for (const chatId of this.options.adminChatIds) {
+      await this.bot.telegram.sendMessage(chatId, message, { parse_mode: "Markdown" }).catch((err) =>
+        console.error(`[Davitus] Broadcast admin ${chatId} error:`, err)
+      );
+    }
+  }
 
   async start(): Promise<void> {
     if (!this.options.token) {
@@ -72,10 +94,14 @@ export class TelegramBotService {
             "/agenda - événements du jour",
             "/traiter - Manager analyse l'inbox et crée les tâches",
             "",
-            "🗂 GTD & Projets",
-            "/project - voir ou changer de projet",
+            "🤖 IA & Orchestration",
+            "/interia - canal de conversation inter-IA",
             "/jobs - jobs dev récents",
             "/job <id> - suivre un job",
+            "",
+            "🗂 GTD & Projets",
+            "/project - voir ou changer de projet",
+            "/cleanup - supprimer les tâches polluantes",
             "",
             "👥 Admin",
             "/users - gérer les accès",
@@ -243,6 +269,58 @@ export class TelegramBotService {
       this.watchJob(jobId, String(ctx.chat.id), ctx);
     });
 
+    // ── /interia — affiche le canal de conversation inter-IA ──────────────────
+    this.bot.command("interia", async (ctx) => {
+      if (!(await this.ensureAuthorizedChat(ctx))) return;
+      if (!this.interIABus) {
+        await ctx.reply("Canal Inter-IA non configuré (workDir manquant).");
+        return;
+      }
+      try {
+        const report = await this.interIABus.formatRecent(10);
+        await ctx.reply(report, { parse_mode: "Markdown" });
+      } catch (err) {
+        await ctx.reply("Erreur lecture canal inter-IA.");
+        console.error("[Davitus] /interia error:", err);
+      }
+    });
+
+    // ── /cleanup — supprime les tâches polluantes (commandes, messages courts) ─
+    this.bot.command("cleanup", async (ctx) => {
+      if (!(await this.ensureAuthorizedChat(ctx))) return;
+      if (!this.taskRepository) {
+        await ctx.reply("Dépôt de tâches non disponible.");
+        return;
+      }
+      try {
+        const tasks = await this.taskRepository.listActive?.() ?? [];
+        const junk = tasks.filter((t) => this.isJunkTask(t.title));
+
+        if (junk.length === 0) {
+          await ctx.reply("Aucune tâche polluante détectée.");
+          return;
+        }
+
+        let deleted = 0;
+        for (const t of junk) {
+          try {
+            await this.taskRepository.delete?.(t.id);
+            deleted++;
+          } catch {
+            // ignore erreurs individuelles
+          }
+        }
+
+        const preview = junk.slice(0, 5).map((t) => `• _${t.title.slice(0, 60)}_`).join("\n");
+        await ctx.reply(
+          `*Nettoyage effectué* — ${deleted} tâche${deleted > 1 ? "s" : ""} supprimée${deleted > 1 ? "s" : ""} :\n${preview}${junk.length > 5 ? `\n_… et ${junk.length - 5} autres_` : ""}`
+        , { parse_mode: "Markdown" });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Erreur";
+        await ctx.reply(`Erreur nettoyage : ${msg}`);
+      }
+    });
+
     this.bot.on("text", async (ctx) => {
       if (!(await this.ensureAuthorizedChat(ctx))) return;
 
@@ -293,6 +371,35 @@ export class TelegramBotService {
         fileName: audio.file_name ?? `telegram-audio-${audio.file_unique_id}.${fallbackExtension}`,
         ...(audio.mime_type ? { mimeType: audio.mime_type } : {})
       });
+    });
+
+    this.bot.on("photo", async (ctx) => {
+      if (!(await this.ensureAuthorizedChat(ctx))) return;
+      if (!this.qwenVision) {
+        await ctx.reply("Vision non configurée — ajoute QWEN_API_KEY dans l'Admin.");
+        return;
+      }
+      const chatId = String(ctx.chat.id);
+      const caption = ctx.message.caption?.trim() ?? "";
+      try {
+        // Prendre la meilleure qualité disponible
+        const photos = ctx.message.photo;
+        const best = photos[photos.length - 1];
+        if (!best) return;
+        const fileLink = await ctx.telegram.getFileLink(best.file_id);
+        const resp = await fetch(fileLink.toString());
+        if (!resp.ok) throw new Error(`Download failed: ${resp.status}`);
+        const buf = Buffer.from(await resp.arrayBuffer());
+        const base64 = buf.toString("base64");
+        const analysis = await this.qwenVision.analyzeImage(base64, "image/jpeg", caption);
+        this.conversations.add(chatId, "user", `[Image] ${caption || "(sans texte)"}`);
+        this.conversations.add(chatId, "assistant", analysis);
+        await ctx.reply(analysis);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Erreur";
+        console.error("[Davitus] Vision error:", msg);
+        await ctx.reply(`Impossible d'analyser l'image : ${msg}`);
+      }
     });
 
     this.bot.launch().catch((error) => console.error("[Telegram] Erreur launch:", error));
@@ -887,6 +994,28 @@ export class TelegramBotService {
     return projects.find((project) => project.id.toLowerCase() === normalized)
       ?? projects.find((project) => project.title.trim().toLowerCase() === normalized)
       ?? projects.find((project) => project.title.toLowerCase().includes(normalized));
+  }
+
+  /**
+   * Détecte si un titre de tâche est du "bruit" — message Telegram capturé par erreur.
+   * Ces tâches sont créées quand l'ancienne version de Davitus n'avait pas de règle "none".
+   */
+  private isJunkTask(title: string): boolean {
+    const t = title.trim();
+    // Commandes Telegram
+    if (t.startsWith("/")) return true;
+    // Trop court pour être une vraie tâche
+    if (t.length < 8) return true;
+    // Salutations et messages courants sans action
+    const junkPatterns = [
+      /^(bonjour|bonsoir|salut|hello|hey|coucou|hi)\b/i,
+      /^(ok|oui|non|merci|super|parfait|exact|correct|bien|bonne|bon)\b/i,
+      /^(tu es l[aà] ?[\?!.]?|test|ping|allo|vous êtes là)\b/i,
+      /^(peux[-\s]tu|pouvez[-\s]vous|est[-\s]ce que tu|est[-\s]ce que vous)\b/i,
+      /^(activer|installer|configurer|vérifier)\b.*api\b/i,
+      /^davitus\b/i
+    ];
+    return junkPatterns.some((re) => re.test(t));
   }
 
   private isAdmin(chatId: string): boolean {

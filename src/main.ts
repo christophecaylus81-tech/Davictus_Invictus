@@ -86,23 +86,32 @@ async function bootstrap(): Promise<void> {
     ? new GeminiAdapter(env.integrations.geminiApiKey, env.integrations.geminiProModel)
     : undefined;
 
-  // ── Manager (GPT orchestrateur, équipe spécialisée) ──────────────────────────
+  // ── Manager (au moins GPT ou DeepSeek requis, reste optionnel) ──────────────
   const managerGpt = gptAdapter ?? deepseekAdapter;
-  const managerService = managerGpt && qwenCoderAdapter && geminiFlashAdapter && geminiProAdapter
+  const managerService = managerGpt
     ? new ManagerService(
         {
           gpt: managerGpt,
-          qwenCoder: qwenCoderAdapter,
-          geminiFlash: geminiFlashAdapter,
-          geminiPro: geminiProAdapter,
-          ...(claudeAdapter ? { claude: claudeAdapter } : {})
+          ...(qwenCoderAdapter   ? { qwenCoder:    qwenCoderAdapter   } : {}),
+          ...(geminiFlashAdapter ? { geminiFlash:  geminiFlashAdapter } : {}),
+          ...(geminiProAdapter   ? { geminiPro:    geminiProAdapter   } : {}),
+          ...(claudeAdapter      ? { claude:       claudeAdapter      } : {}),
         },
         developerControl
       )
     : undefined;
 
-  if (!managerService) {
-    console.warn('[Manager] Service inactif — requis : (OPENAI_API_KEY ou DEEPSEEK_API_KEY) + QWEN_API_KEY + GEMINI_API_KEY')
+  if (managerService) {
+    const active = [
+      'gpt/' + (gptAdapter ? env.integrations.openaiManagerModel : 'deepseek'),
+      qwenCoderAdapter   ? 'qwen-coder'   : null,
+      geminiFlashAdapter ? 'gemini-flash' : null,
+      geminiProAdapter   ? 'gemini-pro'   : null,
+      claudeAdapter      ? 'claude'       : null,
+    ].filter(Boolean).join(', ')
+    console.log(`[Manager] Actif — équipe : ${active}`)
+  } else {
+    console.warn('[Manager] Inactif — requis : DEEPSEEK_API_KEY ou OPENAI_API_KEY')
   }
 
   const app = createServer({
@@ -144,7 +153,9 @@ async function bootstrap(): Promise<void> {
     gmailService,
     calendarService,
     googleTasksService,
-    managerService
+    managerService,
+    qwenCoderAdapter ?? undefined,
+    WORK_DIR
   );
   try {
     await telegramBot.start();
@@ -178,6 +189,9 @@ async function bootstrap(): Promise<void> {
   managerLoop.on("error", (err) => {
     console.error("[Orchestrateur] erreur:", err.message);
   });
+
+  // Injecter le callback de notification Telegram dans le ManagerLoop
+  managerLoop.setNotifyCallback((msg) => telegramBot.broadcastToAdmins(msg));
 
   managerLoop.start();
   console.log(`[Orchestrateur] démarré — surveille ${KANBAN_PATH}`);

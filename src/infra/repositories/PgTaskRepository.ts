@@ -77,4 +77,8 @@ export class PgTaskRepository implements TaskRepository {
     if (result.rows.length === 0) throw new Error(`Tâche ${id} introuvable`);
     return mapTaskRow(result.rows[0]);
   }
+
+  async delete(id: string): Promise<void> {
+    await this.db.query(`DELETE FROM tasks WHERE id = $1`, [id]);
+  }
 }

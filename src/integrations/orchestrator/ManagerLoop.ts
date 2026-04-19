@@ -1,6 +1,7 @@
 import { EventEmitter } from "events";
 import type { AiRouter } from "../ai-router/AiRouter";
 import { FileWatcher } from "./FileWatcher";
+import { InterIABus } from "./InterIABus";
 import { MdWriter } from "./MdWriter";
 import { TaskDispatcher } from "./TaskDispatcher";
 import type { Kanban, KanbanTask } from "./types";
@@ -11,6 +12,9 @@ export interface ManagerLoopConfig {
   aiRouter: AiRouter;
   maxConcurrentTasks?: number | undefined;
 }
+
+// Callback pour notifier l'utilisateur via Telegram (injecté par main.ts)
+export type NotifyCallback = (message: string) => Promise<void>;
 
 export declare interface ManagerLoop {
   on(event: "task_dispatched", listener: (task: KanbanTask) => void): this;
@@ -23,16 +27,32 @@ export class ManagerLoop extends EventEmitter {
   private readonly watcher: FileWatcher;
   private readonly dispatcher: TaskDispatcher;
   private readonly writer: MdWriter;
+  private readonly bus: InterIABus;
   private readonly maxConcurrent: number;
   private activeDispatches = new Set<string>(); // task IDs en cours
   private pendingReadyTaskIds: string[] = [];
+  private notifyCallback?: NotifyCallback;
 
   constructor(private readonly config: ManagerLoopConfig) {
     super();
     this.watcher = new FileWatcher(config.kanbanPath);
     this.dispatcher = new TaskDispatcher(config.aiRouter, config.workDir);
     this.writer = new MdWriter(config.workDir);
+    this.bus = new InterIABus(config.workDir);
     this.maxConcurrent = config.maxConcurrentTasks ?? 3;
+  }
+
+  /** Enregistre le callback de notification Telegram (appelé par main.ts) */
+  setNotifyCallback(cb: NotifyCallback): void {
+    this.notifyCallback = cb;
+  }
+
+  private async notify(message: string): Promise<void> {
+    if (this.notifyCallback) {
+      await this.notifyCallback(message).catch((err) =>
+        console.error("[ManagerLoop] Notification error:", err)
+      );
+    }
   }
 
   start(): void {
@@ -95,10 +115,12 @@ export class ManagerLoop extends EventEmitter {
 
     this.activeDispatches.add(task.id);
     this.emit("task_dispatched", task);
+    void this.bus.taskDispatched(task.id, task.assignee as import("./InterIABus").InterIAActor, task.promptManager);
 
     try {
       await this.dispatcher.dispatch(task, kanban);
     } catch (err) {
+      void this.bus.error(task.id, "MANAGER", err instanceof Error ? err.message : String(err));
       this.emit("error", err instanceof Error ? err : new Error(String(err)));
     } finally {
       this.activeDispatches.delete(task.id);
@@ -128,7 +150,11 @@ export class ManagerLoop extends EventEmitter {
           type: "verdict",
           detail: `${task.id} satisfaisant ✅ — ${reason}`
         });
+        await this.bus.verdict(task.id, true, reason);
         this.emit("task_validated", task);
+        await this.notify(
+          `✅ *Tâche validée* — \`${task.id}\`\n*${task.title}*\n_Exécutée par: ${task.assignee}_\n\n${reason}`
+        );
 
       } else {
         // Rejeter et réassigner si besoin
@@ -152,7 +178,11 @@ export class ManagerLoop extends EventEmitter {
           type: "rejet",
           detail: `${task.id} rejeté → ${newId} créé. Raison: ${reason}`
         });
+        await this.bus.verdict(task.id, false, reason);
         this.emit("task_rejected", task, reason);
+        await this.notify(
+          `❌ *Tâche rejetée* — \`${task.id}\`\n*${task.title}*\n_Raison: ${reason}_\n\nNouvelle tentative créée : \`${newId}\``
+        );
       }
 
     } catch (err) {

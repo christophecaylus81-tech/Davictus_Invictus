@@ -19,4 +19,5 @@ export interface TaskRepository {
   create(data: CreateTaskData): Promise<Task>;
   updateStatus(id: string, status: TaskStatus): Promise<Task>;
   updateProject(id: string, projectId: string | null): Promise<Task>;
+  delete(id: string): Promise<void>;
 }

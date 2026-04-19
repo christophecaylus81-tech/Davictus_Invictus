@@ -1,6 +1,8 @@
 import { join } from "path";
 import type { AiRouter } from "../ai-router/AiRouter";
 import type { LlmRequest } from "../ai-router/types";
+import type { InterIAActor } from "./InterIABus";
+import { InterIABus } from "./InterIABus";
 import { MdParser } from "./MdParser";
 import { MdWriter } from "./MdWriter";
 import type { AgentId, Kanban, KanbanTask, MemoryEntry } from "./types";
@@ -21,15 +23,25 @@ export interface DispatchResult {
   error?: string | undefined;
 }
 
+const AGENT_TO_INTER_IA: Record<AgentId, InterIAActor> = {
+  MANAGER: "MANAGER",
+  CODEX: "CODEX",
+  CLAUDE: "CLAUDE",
+  DEEPSEEK: "DEEPSEEK",
+  QWEN: "QWEN"
+};
+
 export class TaskDispatcher {
   private readonly parser = new MdParser();
   private readonly writer: MdWriter;
+  private readonly bus: InterIABus;
 
   constructor(
     private readonly aiRouter: AiRouter,
     private readonly workDir: string
   ) {
     this.writer = new MdWriter(workDir);
+    this.bus = new InterIABus(workDir);
   }
 
   // ── Dispatche une tâche vers l'IA assignée ──────────────────────────────────
@@ -44,30 +56,45 @@ export class TaskDispatcher {
     await this.writer.writeKanban(current);
     await this.log(current, task.assignee, "statut", `${task.id} : À FAIRE → EN COURS`);
 
+    const actor = AGENT_TO_INTER_IA[task.assignee] ?? "CODEX";
+    const startedAt = Date.now();
+
     try {
-      // 2. Construire la requête vers l'IA
+      // 2. Log démarrage dans le bus inter-IA
+      await this.bus.executionStarted(task.id, actor);
+
+      // 3. Construire la requête vers l'IA
       const request = this.buildRequest(task);
 
-      // 3. Router vers le bon modèle
+      // 4. Router vers le bon modèle
       const response = await this.aiRouter.complete(task.title, request);
 
-      // 4. Parser la réponse — note IA + contenu rapport
+      // 5. Parser la réponse — note IA + contenu rapport
       const { noteIa, reportContent } = this.parseResponse(response.content, task);
+      const durationSeconds = Math.round((Date.now() - startedAt) / 1000);
 
-      // 5. Écrire le rapport si demandé
+      // 6. Écrire le rapport si demandé
       let reportPath: string | undefined;
+      const modifiedFiles = this.extractFilePaths(reportContent);
       if (task.reportRequested && reportContent) {
         reportPath = await this.writer.writeReport({
           taskId: task.id,
           taskTitle: task.title,
           agentId: task.assignee,
           summary: reportContent,
-          modifiedFiles: this.extractFilePaths(reportContent)
+          modifiedFiles
         });
         await this.log(current, task.assignee, "rapport", `${task.id} → ${reportPath}`);
       }
 
-      // 6. Passer en REVIEW + note IA
+      // 7. Log résultat dans le bus inter-IA
+      await this.bus.result(task.id, actor, noteIa ?? reportContent.slice(0, 300), {
+        filesModified: modifiedFiles,
+        ...(response.tokensUsed !== undefined ? { tokensUsed: response.tokensUsed } : {}),
+        durationSeconds
+      });
+
+      // 8. Passer en REVIEW + note IA
       current = this.writer.updateTaskStatus(current, task.id, "review", {
         noteIa: noteIa ?? `Traité par ${response.model}`,
         reportPath: reportPath ?? (task.reportRequested ? join("reports", `${task.id}.md`) : undefined),
@@ -81,7 +108,8 @@ export class TaskDispatcher {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
 
-      // En cas d'erreur : repasser en todo pour réessai
+      // En cas d'erreur : log bus + repasser en todo pour réessai
+      await this.bus.error(task.id, actor, errorMsg);
       current = this.writer.updateTaskStatus(current, task.id, "todo", {
         noteIa: `ERREUR: ${errorMsg}`
       });
