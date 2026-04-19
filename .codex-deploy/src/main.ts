@@ -14,6 +14,7 @@ import { N8nWebhookNotifier } from "./integrations/n8n/N8nAdapter";
 import { HttpOllamaClient } from "./integrations/ollama/OllamaAdapter";
 import { ManagerLoop } from "./integrations/orchestrator/ManagerLoop";
 import { TelegramBotService } from "./integrations/telegram/TelegramBotService";
+import { OpenAiSpeechToTextService } from "./integrations/voice/OpenAiSpeechToTextService";
 
 async function bootstrap(): Promise<void> {
   await pool.query("SELECT 1");
@@ -34,6 +35,13 @@ async function bootstrap(): Promise<void> {
   });
 
   const notifier = new N8nWebhookNotifier(env.integrations.n8nWebhookUrl);
+  const speechToText = env.integrations.openaiApiKey
+    ? new OpenAiSpeechToTextService(
+        env.integrations.openaiApiKey,
+        env.integrations.openaiBaseUrl,
+        env.integrations.openaiTranscribeModel
+      )
+    : undefined;
 
   const app = createServer({
     captureInboxItem,
@@ -57,7 +65,11 @@ async function bootstrap(): Promise<void> {
     },
     captureInboxItem,
     processInboxItem,
-    notifier
+    notifier,
+    aiRouter,
+    projectRepository,
+    taskRepository,
+    speechToText
   );
   await telegramBot.start();
 
@@ -65,6 +77,7 @@ async function bootstrap(): Promise<void> {
   const ollamaClient = new HttpOllamaClient(env.integrations.ollamaBaseUrl);
   const ollamaReady = await ollamaClient.isAvailable();
   console.log(`Ollama disponible: ${ollamaReady ? "oui" : "non"}`);
+  console.log(`Transcription vocale: ${speechToText ? "configurée" : "non configurée"}`);
 
   // ── Orchestrateur ────────────────────────────────────────────────────────────
   const WORK_DIR = join(process.cwd(), "workspace");

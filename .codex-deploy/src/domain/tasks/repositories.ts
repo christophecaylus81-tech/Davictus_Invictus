@@ -7,4 +7,5 @@ export interface TaskListFilters {
 
 export interface TaskRepository {
   list(filters?: TaskListFilters): Promise<Task[]>;
+  listActive(): Promise<Task[]>;
 }

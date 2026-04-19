@@ -31,13 +31,15 @@ export class PgTaskRepository implements TaskRepository {
     }
 
     const result = await this.db.query(
-      `
-      SELECT *
-      FROM tasks
-      ORDER BY updated_at DESC
-      LIMIT $1
-      `,
+      `SELECT * FROM tasks ORDER BY updated_at DESC LIMIT $1`,
       [limit]
+    );
+    return result.rows.map(mapTaskRow);
+  }
+
+  async listActive(): Promise<Task[]> {
+    const result = await this.db.query(
+      `SELECT * FROM tasks WHERE status IN ('todo','next','in_progress') ORDER BY updated_at DESC LIMIT 20`
     );
     return result.rows.map(mapTaskRow);
   }

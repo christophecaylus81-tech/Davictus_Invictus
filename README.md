@@ -99,6 +99,28 @@ npm run dev
 
 API: `http://localhost:3001`
 
+## 4 bis) Mode local "Manager d'IA"
+
+Si tu veux une version locale très simple de Daitivus dans le terminal de VS Code, sans Railway ni base obligatoire :
+
+```bash
+npm run local:manager
+```
+
+Ce mode :
+
+- ne dépend pas du backend HTTP
+- ne dépend pas de PostgreSQL
+- route une demande vers `direct`, `codex`, `deepseek`, `qwen`, `gemini`, `claude` ou `ollama`
+- crée un fichier de handoff pour Codex quand la demande implique de vraies modifs de code
+
+Variables utiles dans `.env` :
+
+- `DAITIVUS_MANAGER_PROVIDER` pour forcer le manager (`ollama`, `deepseek`, `qwen`, `openai`, `gemini`, `claude`)
+- `DEEPSEEK_API_KEY`, `QWEN_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`
+- `OLLAMA_BASE_URL` si tu veux un mode local sans token cloud
+- `DAITIVUS_CODEX_OUTPUT_DIR` pour choisir où écrire les handoffs Codex
+
 ## 5) Flux MVP
 
 ### Telegram

@@ -12,6 +12,9 @@ const rawEnvSchema = z.object({
   TELEGRAM_AUTO_PROCESS: z.enum(["true", "false"]).default("true"),
   N8N_WEBHOOK_URL: z.string().optional(),
   OLLAMA_BASE_URL: z.string().url().default("http://localhost:11434"),
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
+  OPENAI_TRANSCRIBE_MODEL: z.string().default("gpt-4o-mini-transcribe"),
   DEEPSEEK_API_KEY: z.string().optional(),
   DEEPSEEK_BASE_URL: z.string().url().default("https://api.deepseek.com/v1"),
   ANTHROPIC_API_KEY: z.string().optional()
@@ -49,6 +52,9 @@ export const env = {
   integrations: {
     n8nWebhookUrl: normalizeOptional(parsed.N8N_WEBHOOK_URL),
     ollamaBaseUrl: parsed.OLLAMA_BASE_URL,
+    openaiApiKey: normalizeOptional(parsed.OPENAI_API_KEY),
+    openaiBaseUrl: parsed.OPENAI_BASE_URL,
+    openaiTranscribeModel: parsed.OPENAI_TRANSCRIBE_MODEL,
     deepseekApiKey: normalizeOptional(parsed.DEEPSEEK_API_KEY),
     deepseekBaseUrl: parsed.DEEPSEEK_BASE_URL,
     anthropicApiKey: normalizeOptional(parsed.ANTHROPIC_API_KEY)

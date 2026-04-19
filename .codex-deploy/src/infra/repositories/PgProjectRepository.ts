@@ -15,13 +15,15 @@ export class PgProjectRepository implements ProjectRepository {
 
   async list(limit: number): Promise<Project[]> {
     const result = await this.db.query(
-      `
-      SELECT *
-      FROM projects
-      ORDER BY updated_at DESC
-      LIMIT $1
-      `,
+      `SELECT * FROM projects ORDER BY updated_at DESC LIMIT $1`,
       [safeLimit(limit)]
+    );
+    return result.rows.map(mapProjectRow);
+  }
+
+  async listActive(): Promise<Project[]> {
+    const result = await this.db.query(
+      `SELECT * FROM projects WHERE status = 'active' ORDER BY updated_at DESC LIMIT 20`
     );
     return result.rows.map(mapProjectRow);
   }
