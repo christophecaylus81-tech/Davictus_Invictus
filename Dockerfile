@@ -22,4 +22,4 @@ COPY --from=builder /app/src/infra/db/schema.sql ./src/infra/db/schema.sql
 
 EXPOSE 3001
 
-CMD ["sh", "-c", "node dist/infra/db/migrate.js && node dist/main.js"]
+CMD ["node", "dist/main.js"]
