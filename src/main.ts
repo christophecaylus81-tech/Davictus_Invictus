@@ -31,8 +31,6 @@ import { TelegramBotService } from "./integrations/telegram/TelegramBotService";
 import { OpenAiSpeechToTextService } from "./integrations/voice/OpenAiSpeechToTextService";
 
 async function bootstrap(): Promise<void> {
-  await pool.query("SELECT 1");
-
   const inboxRepository = new PgInboxRepository(pool);
   const projectRepository = new PgProjectRepository(pool);
   const taskRepository = new PgTaskRepository(pool);
@@ -121,6 +119,11 @@ async function bootstrap(): Promise<void> {
 
   const server = app.listen(env.port, env.host, () => {
     console.log(`Fusion API démarrée sur http://${env.host}:${env.port}`);
+  });
+
+  // Non-bloquant : Railway healthcheck passe sans attendre la DB
+  void pool.query("SELECT 1").catch((error) => {
+    console.error("Connexion PostgreSQL indisponible au démarrage :", error);
   });
 
   const telegramBot = new TelegramBotService(

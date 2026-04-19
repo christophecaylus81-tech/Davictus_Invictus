@@ -23,4 +23,4 @@ COPY workspace/KANBAN.md ./workspace/KANBAN.md
 
 EXPOSE 3001
 
-CMD ["sh", "-c", "node dist/infra/db/migrate.js && node dist/main.js"]
+CMD ["node", "dist/main.js"]

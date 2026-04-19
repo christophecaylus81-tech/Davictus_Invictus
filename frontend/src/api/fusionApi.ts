@@ -1,4 +1,14 @@
-const BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
+declare global {
+  interface Window {
+    __RUNTIME_CONFIG__?: {
+      VITE_API_URL?: string
+    }
+  }
+}
+
+const runtimeApiUrl = window.__RUNTIME_CONFIG__?.VITE_API_URL
+const buildTimeApiUrl = import.meta.env.VITE_API_URL
+const BASE = (runtimeApiUrl ?? buildTimeApiUrl ?? '').replace(/\/$/, '')
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`)
