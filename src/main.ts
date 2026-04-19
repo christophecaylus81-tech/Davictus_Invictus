@@ -16,8 +16,6 @@ import { ManagerLoop } from "./integrations/orchestrator/ManagerLoop";
 import { TelegramBotService } from "./integrations/telegram/TelegramBotService";
 
 async function bootstrap(): Promise<void> {
-  await pool.query("SELECT 1");
-
   const inboxRepository = new PgInboxRepository(pool);
   const projectRepository = new PgProjectRepository(pool);
   const taskRepository = new PgTaskRepository(pool);
@@ -45,8 +43,13 @@ async function bootstrap(): Promise<void> {
     notifier
   });
 
-  const server = app.listen(env.port, () => {
-    console.log(`Fusion API démarrée sur http://localhost:${env.port}`);
+  const server = app.listen(env.port, env.host, () => {
+    console.log(`Fusion API démarrée sur http://${env.host}:${env.port}`);
+  });
+
+  // Railway healthchecks should not wait for a blocking DB connection.
+  void pool.query("SELECT 1").catch((error) => {
+    console.error("Connexion PostgreSQL indisponible au démarrage :", error);
   });
 
   const telegramBot = new TelegramBotService(
@@ -62,7 +65,11 @@ async function bootstrap(): Promise<void> {
     projectRepository,
     taskRepository
   );
-  await telegramBot.start();
+  try {
+    await telegramBot.start();
+  } catch (error) {
+    console.error("Telegram indisponible au démarrage :", error);
+  }
 
   // ── Ollama health check ──────────────────────────────────────────────────────
   const ollamaClient = new HttpOllamaClient(env.integrations.ollamaBaseUrl);
